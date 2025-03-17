@@ -3,7 +3,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from toy_be.dialogue_manager import get_initial_state, create_workflow, State
+from dialogue_manager import get_initial_state, create_workflow, State
 from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import BaseModel
 

@@ -1,132 +1,92 @@
-import React from 'react';
-import { UserOutlined, RobotOutlined } from '@ant-design/icons';
-import { Bubble, Sender, useXAgent, useXChat } from '@ant-design/x';
-import { Flex, type GetProp } from 'antd';
+import React, { useState, useEffect, useRef } from "react";
+import { UserOutlined, RobotOutlined } from "@ant-design/icons";
+import { Bubble, Sender, useXAgent, useXChat } from "@ant-design/x";
+import { Flex, type GetProp } from "antd";
 
-// Define roles for the chat bubbles
-const roles: GetProp<typeof Bubble.List, 'roles'> = {
+const roles: GetProp<typeof Bubble.List, "roles"> = {
   ai: {
-    placement: 'start',
-    avatar: { icon: <RobotOutlined />, style: { background: '#fde3cf' } },
+    placement: "start",
+    avatar: { icon: <RobotOutlined />, style: { background: "#fde3cf" } },
     typing: { step: 5, interval: 20 },
-    style: {
-      maxWidth: 600,
-    },
+    style: { maxWidth: 600 },
   },
   local: {
-    placement: 'end',
-    avatar: { icon: <UserOutlined />, style: { background: '#87d068' } },
+    placement: "end",
+    avatar: { icon: <UserOutlined />, style: { background: "#87d068" } },
   },
 };
 
 const ChatApp = () => {
-  const [content, setContent] = React.useState('');
-  const webSocketRef = React.useRef<WebSocket | null>(null);
-  const [threadId, setThreadId] = React.useState<string | null>(null);
-  const [connecting, setConnecting] = React.useState(true);
+  const [content, setContent] = useState("");
+  const webSocketRef = useRef<WebSocket | null>(null);
+  const [messages, setMessages] = useState<{ id: number; message: string; role: "ai" | "local" }[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(true);
 
-  // Initialize WebSocket connection
-  React.useEffect(() => {
-    // Connect to WebSocket server
-    const ws = new WebSocket('ws://localhost:8000/ws');
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/ws");
     webSocketRef.current = ws;
 
-    // Handle connection opening
     ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log("WebSocket connected");
       setConnecting(false);
     };
 
-    // Handle connection closing
     ws.onclose = () => {
-      console.log('WebSocket disconnected');
+      console.log("WebSocket disconnected");
       setConnecting(true);
     };
 
-    // Clean up on unmount
+    ws.onmessage = (event) => {
+      const data = event.data;
+      console.log("Received message:", data);
+
+      if (typeof data === "string" && data.startsWith("THREAD_ID:")) {
+        setThreadId(data.substring(10));
+        return;
+      }
+
+      setMessages((prev) => [...prev, { id: prev.length, message: data, role: "ai" }]);
+    };
+
     return () => {
       ws.close();
     };
   }, []);
 
-  // Configure the agent
-  const [agent] = useXAgent({
-    request: async ({ message }, { onSuccess, onError }) => {
-      if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
-        onError(new Error('WebSocket is not connected'));
-        return;
-      }
+  const sendMessage = (message: string) => {
+    if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected.");
+      return;
+    }
 
-      try {
-        // Send message to server - fixed TypeScript error
-        if (message !== undefined) {
-          webSocketRef.current.send(message);
-        } else {
-          onError(new Error("Message is undefined"));
-          return;
-        }
-
-        // Handle responses from server
-        const messageHandler = (event: MessageEvent) => {
-          const data = event.data;
-          // Check if it's a thread ID message
-          if (typeof data === 'string' && data.startsWith('THREAD_ID:')) {
-            const newThreadId = data.substring(10);
-            setThreadId(newThreadId);
-            return; // Skip this message as it's not a chat response
-          }
-
-          // Process as a normal message
-          onSuccess(data);
-          
-          // Remove the event listener after success
-          webSocketRef.current?.removeEventListener('message', messageHandler);
-        };
-
-        // Add event listener for this specific request
-        webSocketRef.current.addEventListener('message', messageHandler);
-      } catch (error) {
-        onError(error instanceof Error ? error : new Error('Unknown error'));
-      }
-    },
-  });
-
-  // Use chat hook
-  const { onRequest, messages } = useXChat({
-    agent,
-    requestPlaceholder: 'Waiting for response...',
-    requestFallback: 'Failed to get a response. Please try again later.',
-  });
+    setMessages((prev) => [...prev, { id: prev.length, message, role: "local" }]);
+    webSocketRef.current.send(message);
+  };
 
   return (
-    <Flex vertical gap="middle" style={{ maxWidth: 800, margin: '0 auto', padding: 20 }}>
-      <div style={{ textAlign: 'center', marginBottom: 16 }}>
-        {connecting ? (
-          <div>Connecting to server...</div>
-        ) : (
-          <div>Connected! {threadId ? `Thread ID: ${threadId}` : ''}</div>
-        )}
+    <Flex vertical gap="middle" style={{ maxWidth: 800, margin: "0 auto", padding: 20 }}>
+      <div style={{ textAlign: "center", marginBottom: 16 }}>
+        {connecting ? <div>Connecting to server...</div> : <div>Connected! {threadId ? `Thread ID: ${threadId}` : ""}</div>}
       </div>
-      
+
       <Bubble.List
         roles={roles}
-        style={{ height: 400, overflow: 'auto' }}
-        items={messages.map(({ id, message, status }) => ({
+        style={{ height: 400, overflow: "auto" }}
+        items={messages.map(({ id, message, role }) => ({
           key: id,
-          loading: status === 'loading',
-          role: status === 'local' ? 'local' : 'ai',
+          role,
           content: message,
         }))}
       />
-      
+
       <Sender
         disabled={connecting}
-        loading={agent.isRequesting()}
         value={content}
         onChange={setContent}
         onSubmit={(nextContent) => {
-          onRequest(nextContent);
-          setContent('');
+          sendMessage(nextContent);
+          setContent("");
         }}
         placeholder="Type your message here..."
       />
