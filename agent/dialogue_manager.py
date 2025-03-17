@@ -9,7 +9,7 @@ from langchain.output_parsers import StructuredOutputParser
 from langchain_openai import AzureChatOpenAI
 
 from schema import AudienceBuilderState, ProductIdentification, ProductSearchResults
-from tools import SKULookupTool, ProductLookupTool
+from tools import SKULookupTool, ProductLookupTool, transform_to_product_table
 
 from pprint import pprint
 
@@ -91,82 +91,178 @@ def identify_product(state: AudienceBuilderState) -> AudienceBuilderState:
             **state,
             "product_name": result.product_name,
             "conversation_history": state["conversation_history"] + [
-                AIMessage(content=f"Got it! You're building audiences for {result.product_name}.")
+                AIMessage(content=f"Got it! You're building audiences for {result.product_name}. Let's retrieve some product details for you.")
             ],
-            "current_node": "lookup_product_details"  # 🚀 This ensures the workflow stops looping
+            "current_node": "get_product_table"
         }
 
-def lookup_product_details(state: AudienceBuilderState) -> AudienceBuilderState:
 
-    print(f"\n\nLooking up product details for Product Name: {state.get('product_name')}")
-
-    product_name = state.get("product_name")
-    product_lookup_tool = ProductLookupTool()
-
-    try:
-        product_search_results = product_lookup_tool.invoke(product_name)
-
-        # Summarize the details to the user
-        response_prompt = ChatPromptTemplate.from_template(
-            """You are an audience building assistant for retail media.
-            
-            You just received details for the Product Name {product_name}. 
-            You have also just run a search to return similar product variants, with results grouped by Buyer Category and Product Categories.
-            
-            - Product Name: {product_name}
-            - Product Details: {product_search_results}
-
-            Respond warmly to the user confirming the Product Name.
-            Summarise the product variants that have been found, specifying the unique Buyer Categories and Product Categories.
-
-            Do not say 'Hi' or 'Hello' or anything like that. You have already spoken with the user.
-
-            YOU MUST RESPOND as the assistant.
-            """
-        )
-
-        response_chain = response_prompt | llm
-        response = response_chain.invoke({
-            "product_name": product_name,
-            "product_search_results": product_search_results
-        })
-
-        print(f"\n\nResponse: {response.content}")
-
-        return {
-            **state,
-            "product_name": product_name,
-            "product_search_results": product_search_results,
-            "current_node": END,
-            "conversation_history": state["conversation_history"] + [
-                AIMessage(content=response.content)
-            ]
-        }
+def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
+    print("\n\nFormatting Search Results")
     
-    except Exception as e:
-        print("\nException in lookup_product_details:", repr(e))
-        # If the SKU cannot be found or something else goes wrong
-        not_found_prompt = ChatPromptTemplate.from_template(
-            """You are an audience building assistant for retail media.
-            
-            The user asked about Product Name {product_name}, but it could not be found in our database.
-            
-            Politely inform them that you couldn't find this Product and ask if they'd like to try a different product.
-
-            Respond as the assistant.
-            """
-        )
-
-        not_found_chain = not_found_prompt | llm
-        not_found_response = not_found_chain.invoke({"name": product_name})
+    # Get the product name from state
+    product_name = state.get("product_name")
+    
+    try:
+        # Get the product search results (either from state or by querying)
+        product_search_results = state.get("product_search_results")
+        if not product_search_results:
+            product_lookup_tool = ProductLookupTool()
+            product_search_results = product_lookup_tool.invoke(product_name)
+            # Save the full results in state for potential future use
+            state = {**state, "product_search_results": product_search_results}
         
+        # Transform the search results into a table format
+        product_table = transform_to_product_table(product_search_results)
+        
+        # Save the table format in state
+        state = {**state, "product_table": product_table}
+        
+        # Create a prompt template that takes the structured data
+        response_prompt = ChatPromptTemplate.from_template("""
+        You are a data formatter that creates clean, readable summaries from product data.
+        
+        Here are the search results for products:
+        
+        Query: {query}
+        Buyer Categories: {buyer_categories}
+        Product Categories: {product_categories}
+        Total Results: {total_results}
+        
+        Here's the detailed data for each category combination:
+        {table_data}
+        
+        Your job is to:
+        1. First, provide a brief summary of the search results.
+        2. Then, present the data as a well-formatted markdown table with these EXACT columns:
+           - Buyer Category
+           - Product Category
+           - Sample SKUs (show product names for up to 5)
+           - Total SKUs (the count)
+        3. Make sure the table is properly formatted with markdown syntax (|, -, etc.)
+        4. After the table, mention that this will help them build audiences more effectively.
+        
+        YOU MUST INCLUDE THE ACTUAL TABLE IN YOUR RESPONSE.
+        """)
+        
+        # Prepare detailed table data for the prompt
+        table_details = []
+        for row in product_table["rows"]:
+            # Format the sample SKUs as a readable list
+            sku_samples = ", ".join([f"{s['name']} (SKU: {s['sku']})" for s in row["skus"]])
+            table_details.append(
+                f"- {row['buyer_category']} > {row['product_category']}:\n" +
+                f"  * Sample SKUs: {sku_samples}\n" +
+                f"  * Total SKUs: {row['count']}"
+            )
+        
+        # Create the chain
+        response_chain = response_prompt | llm
+        
+        # Invoke the chain with the formatted product data
+        response = response_chain.invoke({
+            "query": product_name,
+            "buyer_categories": ", ".join(product_search_results.unique_buyer_categories),
+            "product_categories": ", ".join(product_search_results.unique_product_categories),
+            "total_results": product_search_results.total_results,
+            "table_data": "\n\n".join(table_details)
+        })
+        
+        # Extract the content from the response
+        if hasattr(response, 'content'):
+            content = response.content
+        else:
+            content = response
+        
+        # Return updated state with the formatted response
         return {
             **state,
             "conversation_history": state["conversation_history"] + [
-                AIMessage(content=not_found_response.content)
+                AIMessage(content=content)
             ],
             "current_node": END
         }
+        
+    except Exception as e:
+        print(f"Error in get_product_table: {e}")
+        return {
+            **state,
+            "conversation_history": state["conversation_history"] + [
+                AIMessage(content=f"I encountered an error retrieving product details: {str(e)}")
+            ],
+            "current_node": END
+        }
+
+
+# def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
+#     print("\n\nFormatting Search Results")
+    
+#     # Get the product search results from state
+
+
+#     product_name = state.get("product_name")
+#     product_lookup_tool = ProductLookupTool()
+
+#     try:
+#         product_search_results = product_lookup_tool.invoke(product_name)
+    
+#     except Exception as e:
+#         print(e)
+    
+#     # Create a prompt template that takes the structured data
+#     response_prompt = ChatPromptTemplate.from_template("""
+#     You are a data formatter that creates clean, readable summaries from product data.
+    
+#     DO NOT USE Header, or Subheaders in your Markdown. Just bold for emphased titles.
+
+#     Here are the search results for products:
+    
+#     Buyer Categories: {buyer_categories}
+#     Product Categories: {product_categories}
+#     Total Results: {total_results}
+    
+#     Sample products:
+#     {sample_products}
+    
+#     1. First, provide a brief summary of the search results.
+#     2. Then, create a well-formatted markdown table showing the most relevant products.
+#     3. Include columns for: Buyer Category, Product Category, SKU Number, Product Name.
+#     4. Limit to showing at most 10 products total.
+#     """)
+    
+#     # Format the product data for the prompt
+#     # Convert ProductDetails objects to strings for display in the prompt
+#     sample_products = []
+#     for p in product_search_results.all_products[:5]:  # Just show 5 examples
+#         sample_products.append(
+#             f"- {p.product_name} (SKU: {p.sku}, Buyer Category: {p.buyer_category}, Product Category: {p.product_category})"
+#         )
+    
+#     # Create the chain
+#     response_chain = response_prompt | llm
+    
+#     # Invoke the chain with the formatted product data
+#     response = response_chain.invoke({
+#         "buyer_categories": ", ".join(product_search_results.unique_buyer_categories),
+#         "product_categories": ", ".join(product_search_results.unique_product_categories),
+#         "total_results": product_search_results.total_results,
+#         "sample_products": "\n".join(sample_products)
+#     })
+    
+#     # Extract the content from the response
+#     if hasattr(response, 'content'):
+#         content = response.content
+#     else:
+#         content = response
+    
+#     # Return updated state with the formatted response
+#     return {
+#         **state,
+#         "conversation_history": state["conversation_history"] + [
+#             AIMessage(content=content)
+#         ],
+#         "current_node": END
+#     }
 
 def get_initial_state():
     """Returns the initial state for the workflow."""
@@ -176,6 +272,7 @@ def get_initial_state():
         "product_category": None,
         "buyer_category": None,
         "product_search_results": None,
+        "all_products": [],
         "current_node": "greet",
     }
 
@@ -185,23 +282,96 @@ def create_workflow():
     
     workflow.add_node("greet", greet)
     workflow.add_node("identify_product", identify_product)
-    workflow.add_node("lookup_product_details", lookup_product_details)
+    workflow.add_node("get_product_table", get_product_table)
 
     workflow.add_edge("greet", "identify_product")
-    workflow.add_edge("identify_product", "lookup_product_details")
+    workflow.add_edge("identify_product", "get_product_table")
 
     workflow.add_conditional_edges(
         "identify_product",
         lambda state: state["current_node"],
         {
             "identify_product": "identify_product",
-            "lookup_product_details": "lookup_product_details",
+            "get_product_table": "get_product_table",
             END: END
         }
     )
 
-    workflow.add_edge("lookup_product_details", END)
+    workflow.add_edge("get_product_table", END)
 
     workflow.set_entry_point("greet")
     
     return workflow.compile()
+
+
+# def lookup_product_details(state: AudienceBuilderState) -> AudienceBuilderState:
+
+#     print(f"\n\nLooking up product details for Product Name: {state.get('product_name')}")
+
+#     product_name = state.get("product_name")
+#     product_lookup_tool = ProductLookupTool()
+
+#     try:
+#         product_search_results = product_lookup_tool.invoke(product_name)
+
+#         # Summarize the details to the user
+#         response_prompt = ChatPromptTemplate.from_template(
+#             """You are an audience building assistant for retail media.
+            
+#             You just received details for the Product Name {product_name}. 
+#             You have also just run a search to return similar product variants, with results grouped by Buyer Category and Product Categories.
+            
+#             - Product Name: {product_name}
+#             - Product Details: {product_search_results}
+
+#             Respond warmly to the user confirming the Product Name.
+#             Summarise the product variants that have been found, specifying the unique Buyer Categories and Product Categories.
+
+#             Do not say 'Hi' or 'Hello' or anything like that. You have already spoken with the user.
+
+#             YOU MUST RESPOND as the assistant.
+#             """
+#         )
+
+#         response_chain = response_prompt | llm
+#         response = response_chain.invoke({
+#             "product_name": product_name,
+#             "product_search_results": product_search_results
+#         })
+
+#         print(f"\n\nResponse: {response.content}")
+
+#         return {
+#             **state,
+#             "product_name": product_name,
+#             "product_search_results": product_search_results,
+#             "current_node": END,
+#             "conversation_history": state["conversation_history"] + [
+#                 AIMessage(content=response.content)
+#             ]
+#         }
+    
+#     except Exception as e:
+#         print("\nException in lookup_product_details:", repr(e))
+#         # If the SKU cannot be found or something else goes wrong
+#         not_found_prompt = ChatPromptTemplate.from_template(
+#             """You are an audience building assistant for retail media.
+            
+#             The user asked about Product Name {product_name}, but it could not be found in our database.
+            
+#             Politely inform them that you couldn't find this Product and ask if they'd like to try a different product.
+
+#             Respond as the assistant.
+#             """
+#         )
+
+#         not_found_chain = not_found_prompt | llm
+#         not_found_response = not_found_chain.invoke({"name": product_name})
+        
+#         return {
+#             **state,
+#             "conversation_history": state["conversation_history"] + [
+#                 AIMessage(content=not_found_response.content)
+#             ],
+#             "current_node": END
+#         }

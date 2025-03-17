@@ -1,4 +1,5 @@
 import sqlite3
+import json
 
 from langchain.tools import BaseTool
 from typing import Type, ClassVar
@@ -77,9 +78,13 @@ class ProductLookupTool(BaseTool):
             FROM 
                 DIM_ITEMS
             WHERE 
-                skuName LIKE ? || '%' OR
-                skuName LIKE '%' || ? OR
-                skuName LIKE '%' || ? || '%'
+                (
+                    skuName LIKE ? || '%' OR
+                    skuName LIKE '%' || ? OR
+                    skuName LIKE '%' || ? || '%'
+                )
+                AND catLevel4Name != 'NOT IN USE'
+                AND catLevel5Name != 'NOT IN USE'
             ORDER BY 
                 CASE
                     WHEN skuName = ? THEN 10
@@ -114,6 +119,10 @@ class ProductLookupTool(BaseTool):
                     product_name = row[1]
                     buyer_category = row[2]
                     product_category = row[3]
+
+                    if buyer_category == 'NOT IN USE' or product_category == 'NOT IN USE':
+                        print(f"Filtering out product {product_name} with category 'NOT IN USE'")
+                        continue
                     
                     # Create product object
                     product = ProductDetails(
@@ -145,12 +154,69 @@ class ProductLookupTool(BaseTool):
                 
                 print(f"\nFound products in {len(unique_buyer_categories)} buyer categories and {len(unique_product_categories)} product categories\n")
                 
+                with open("res.json", "w") as f:
+                    # Convert to dict first
+                    result_dict = response.model_dump()
+                    json.dump(result_dict, f)
+                
                 return response
             else:
                 raise ValueError(f"Product with name {name} not found")
             
         except sqlite3.Error as e:
             raise ValueError(f"DB Error: {e}")
+        
+
+def transform_to_product_table(product_search_results: ProductSearchResults):
+    """
+    Transform ProductSearchResults into a structured table format with:
+    - Buyer Category
+    - Product Category
+    - Sample SKUs
+    - Total SKU Count
+    
+    Returns a dictionary with the table data and metadata
+    """
+    # Create a structure to track unique buyer/product category combinations
+    category_combinations = {}
+    
+    # Group products by buyer category and product category
+    for product in product_search_results.all_products:
+        buyer_cat = product.buyer_category
+        product_cat = product.product_category
+        
+        # Create a unique key for this combination
+        combo_key = f"{buyer_cat}|||{product_cat}"
+        
+        if combo_key not in category_combinations:
+            category_combinations[combo_key] = {
+                "buyer_category": buyer_cat,
+                "product_category": product_cat,
+                "skus": [],
+                "count": 0
+            }
+        
+        # Add this product's SKU to the list (if not already at 5)
+        if len(category_combinations[combo_key]["skus"]) < 2:
+            category_combinations[combo_key]["skus"].append({
+                "sku": product.sku,
+                "name": product.product_name
+            })
+        
+        # Increment the count
+        category_combinations[combo_key]["count"] += 1
+    
+    # Convert to a list of rows for easier frontend rendering
+    table_rows = list(category_combinations.values())
+    
+    # Create the final structure
+    table_data = {
+        "query": product_search_results.query,
+        "total_results": product_search_results.total_results,
+        "rows": table_rows
+    }
+    
+    return table_data
         
 
             
