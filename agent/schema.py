@@ -33,4 +33,5 @@ class AudienceBuilderState(TypedDict):
     buyer_category: Annotated[Optional[str], "Buyer category from DB"]
     product_search_results: Annotated[Optional[ProductSearchResults], "Product search results from DB"]
     product_search_summary: Annotated[Optional[str], "Summary of product search results"]
+    product_table: Annotated[Optional[Dict], "Product table for UI"]
     current_node: str

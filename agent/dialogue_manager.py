@@ -121,28 +121,25 @@ def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
         # Create a prompt template that takes the structured data
         response_prompt = ChatPromptTemplate.from_template("""
         You are a data formatter that creates clean, readable summaries from product data.
-        
+                                                           
+        YOU MUST BE CONCISE and to the point.
+
         Here are the search results for products:
-        
+
         Query: {query}
         Buyer Categories: {buyer_categories}
         Product Categories: {product_categories}
         Total Results: {total_results}
-        
+
         Here's the detailed data for each category combination:
         {table_data}
-        
+
         Your job is to:
-        1. First, provide a brief summary of the search results.
-        2. Then, present the data as a well-formatted markdown table with these EXACT columns:
-           - Buyer Category
-           - Product Category
-           - Sample SKUs (show product names for up to 5)
-           - Total SKUs (the count)
-        3. Make sure the table is properly formatted with markdown syntax (|, -, etc.)
-        4. After the table, mention that this will help them build audiences more effectively.
-        
-        YOU MUST INCLUDE THE ACTUAL TABLE IN YOUR RESPONSE.
+        1. First, provide a brief summary of the search results (what was found, categories, etc.)
+        2. Then, mention that you're showing a detailed breakdown below.
+        3. End with a note that this data will help them build audiences more effectively.
+
+        DO NOT create or include a table in your response - a formatted table will be displayed separately.
         """)
         
         # Prepare detailed table data for the prompt
@@ -192,77 +189,6 @@ def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
             ],
             "current_node": END
         }
-
-
-# def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
-#     print("\n\nFormatting Search Results")
-    
-#     # Get the product search results from state
-
-
-#     product_name = state.get("product_name")
-#     product_lookup_tool = ProductLookupTool()
-
-#     try:
-#         product_search_results = product_lookup_tool.invoke(product_name)
-    
-#     except Exception as e:
-#         print(e)
-    
-#     # Create a prompt template that takes the structured data
-#     response_prompt = ChatPromptTemplate.from_template("""
-#     You are a data formatter that creates clean, readable summaries from product data.
-    
-#     DO NOT USE Header, or Subheaders in your Markdown. Just bold for emphased titles.
-
-#     Here are the search results for products:
-    
-#     Buyer Categories: {buyer_categories}
-#     Product Categories: {product_categories}
-#     Total Results: {total_results}
-    
-#     Sample products:
-#     {sample_products}
-    
-#     1. First, provide a brief summary of the search results.
-#     2. Then, create a well-formatted markdown table showing the most relevant products.
-#     3. Include columns for: Buyer Category, Product Category, SKU Number, Product Name.
-#     4. Limit to showing at most 10 products total.
-#     """)
-    
-#     # Format the product data for the prompt
-#     # Convert ProductDetails objects to strings for display in the prompt
-#     sample_products = []
-#     for p in product_search_results.all_products[:5]:  # Just show 5 examples
-#         sample_products.append(
-#             f"- {p.product_name} (SKU: {p.sku}, Buyer Category: {p.buyer_category}, Product Category: {p.product_category})"
-#         )
-    
-#     # Create the chain
-#     response_chain = response_prompt | llm
-    
-#     # Invoke the chain with the formatted product data
-#     response = response_chain.invoke({
-#         "buyer_categories": ", ".join(product_search_results.unique_buyer_categories),
-#         "product_categories": ", ".join(product_search_results.unique_product_categories),
-#         "total_results": product_search_results.total_results,
-#         "sample_products": "\n".join(sample_products)
-#     })
-    
-#     # Extract the content from the response
-#     if hasattr(response, 'content'):
-#         content = response.content
-#     else:
-#         content = response
-    
-#     # Return updated state with the formatted response
-#     return {
-#         **state,
-#         "conversation_history": state["conversation_history"] + [
-#             AIMessage(content=content)
-#         ],
-#         "current_node": END
-#     }
 
 def get_initial_state():
     """Returns the initial state for the workflow."""
@@ -375,3 +301,73 @@ def create_workflow():
 #             ],
 #             "current_node": END
 #         }
+
+# def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
+#     print("\n\nFormatting Search Results")
+    
+#     # Get the product search results from state
+
+
+#     product_name = state.get("product_name")
+#     product_lookup_tool = ProductLookupTool()
+
+#     try:
+#         product_search_results = product_lookup_tool.invoke(product_name)
+    
+#     except Exception as e:
+#         print(e)
+    
+#     # Create a prompt template that takes the structured data
+#     response_prompt = ChatPromptTemplate.from_template("""
+#     You are a data formatter that creates clean, readable summaries from product data.
+    
+#     DO NOT USE Header, or Subheaders in your Markdown. Just bold for emphased titles.
+
+#     Here are the search results for products:
+    
+#     Buyer Categories: {buyer_categories}
+#     Product Categories: {product_categories}
+#     Total Results: {total_results}
+    
+#     Sample products:
+#     {sample_products}
+    
+#     1. First, provide a brief summary of the search results.
+#     2. Then, create a well-formatted markdown table showing the most relevant products.
+#     3. Include columns for: Buyer Category, Product Category, SKU Number, Product Name.
+#     4. Limit to showing at most 10 products total.
+#     """)
+    
+#     # Format the product data for the prompt
+#     # Convert ProductDetails objects to strings for display in the prompt
+#     sample_products = []
+#     for p in product_search_results.all_products[:5]:  # Just show 5 examples
+#         sample_products.append(
+#             f"- {p.product_name} (SKU: {p.sku}, Buyer Category: {p.buyer_category}, Product Category: {p.product_category})"
+#         )
+    
+#     # Create the chain
+#     response_chain = response_prompt | llm
+    
+#     # Invoke the chain with the formatted product data
+#     response = response_chain.invoke({
+#         "buyer_categories": ", ".join(product_search_results.unique_buyer_categories),
+#         "product_categories": ", ".join(product_search_results.unique_product_categories),
+#         "total_results": product_search_results.total_results,
+#         "sample_products": "\n".join(sample_products)
+#     })
+    
+#     # Extract the content from the response
+#     if hasattr(response, 'content'):
+#         content = response.content
+#     else:
+#         content = response
+    
+#     # Return updated state with the formatted response
+#     return {
+#         **state,
+#         "conversation_history": state["conversation_history"] + [
+#             AIMessage(content=content)
+#         ],
+#         "current_node": END
+#     }

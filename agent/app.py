@@ -58,8 +58,26 @@ async def websocket_endpoint(websocket: WebSocket):
                         state = step_result[node_name]  # ✅ Persist updated state
                         print(f"🚀 Transitioning to: {state['current_node']}")  # Debugging
                         msgs = state["conversation_history"]
+                        
                         if msgs and isinstance(msgs[-1], AIMessage):
-                            await websocket.send_text(msgs[-1].content)
+                            # Check if we have a product_table in state
+                            if "product_table" in state:
+                                # Create a structured message with both text and table
+                                message_data = {
+                                    "type": "complex",
+                                    "text": msgs[-1].content,
+                                    "table": state["product_table"]
+                                }
+                                print("Sending complex message with table")
+                                # Send as JSON
+                                await websocket.send_json(message_data)
+                                
+                                # Remove product_table from state after sending
+                                state = {**state}
+                                del state["product_table"]
+                            else:
+                                # Just send the text as before
+                                await websocket.send_text(msgs[-1].content)
 
                 # ✅ Close WebSocket when workflow ends
                 if state["current_node"] == END:
@@ -69,6 +87,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print(f"Client {thread_id} disconnected")
+    except Exception as e:
+        print(f"Error in WebSocket handling: {e}")
+        await websocket.close()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

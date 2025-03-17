@@ -92,7 +92,7 @@ class ProductLookupTool(BaseTool):
                     WHEN skuName LIKE '%' || ? || '%' THEN 6
                     ELSE 1
                 END DESC
-            LIMIT 10;
+            LIMIT 50;
             """
             
             params = (name, name, name, name, name, name)
@@ -197,7 +197,7 @@ def transform_to_product_table(product_search_results: ProductSearchResults):
             }
         
         # Add this product's SKU to the list (if not already at 5)
-        if len(category_combinations[combo_key]["skus"]) < 2:
+        if len(category_combinations[combo_key]["skus"]) < 5:
             category_combinations[combo_key]["skus"].append({
                 "sku": product.sku,
                 "name": product.product_name
