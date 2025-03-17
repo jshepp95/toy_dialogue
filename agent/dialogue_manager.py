@@ -32,7 +32,8 @@ def greet(state: AudienceBuilderState) -> AudienceBuilderState:
     print(f"\n\nGreeting user from state: {state}")
     
     if state["conversation_history"]:
-        return state
+        # return state
+        return {**state, "current_node": END}
 
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="""You are an audience building assistant for Pollen.
@@ -92,12 +93,80 @@ def identify_product(state: AudienceBuilderState) -> AudienceBuilderState:
             "conversation_history": state["conversation_history"] + [
                 AIMessage(content=f"Got it! You're building audiences for {result.product_name}.")
             ],
-            "current_node": END  # 🚀 This ensures the workflow stops looping
+            "current_node": "lookup_product_details"  # 🚀 This ensures the workflow stops looping
+        }
+
+def lookup_product_details(state: AudienceBuilderState) -> AudienceBuilderState:
+
+    print(f"\n\nLooking up product details for Product Name: {state.get('product_name')}")
+
+    product_name = state.get("product_name")
+    product_lookup_tool = ProductLookupTool()
+
+    try:
+        product_search_results = product_lookup_tool.invoke(product_name)
+
+        # Summarize the details to the user
+        response_prompt = ChatPromptTemplate.from_template(
+            """You are an audience building assistant for retail media.
+            
+            You just received details for the Product Name {product_name}. 
+            You have also just run a search to return similar product variants, with results grouped by Buyer Category and Product Categories.
+            
+            - Product Name: {product_name}
+            - Product Details: {product_search_results}
+
+            Respond warmly to the user confirming the Product Name.
+            Summarise the product variants that have been found, specifying the unique Buyer Categories and Product Categories.
+
+            Do not say 'Hi' or 'Hello' or anything like that. You have already spoken with the user.
+
+            YOU MUST RESPOND as the assistant.
+            """
+        )
+
+        response_chain = response_prompt | llm
+        response = response_chain.invoke({
+            "product_name": product_name,
+            "product_search_results": product_search_results
+        })
+
+        print(f"\n\nResponse: {response.content}")
+
+        return {
+            **state,
+            "product_name": product_name,
+            "product_search_results": product_search_results,
+            "current_node": END,
+            "conversation_history": state["conversation_history"] + [
+                AIMessage(content=response.content)
+            ]
         }
     
-def route_next_step(state: AudienceBuilderState):
-    """Determines which node to go to next based on the current state."""
-    return state.get("current_node", "greet")
+    except Exception as e:
+        print("\nException in lookup_product_details:", repr(e))
+        # If the SKU cannot be found or something else goes wrong
+        not_found_prompt = ChatPromptTemplate.from_template(
+            """You are an audience building assistant for retail media.
+            
+            The user asked about Product Name {product_name}, but it could not be found in our database.
+            
+            Politely inform them that you couldn't find this Product and ask if they'd like to try a different product.
+
+            Respond as the assistant.
+            """
+        )
+
+        not_found_chain = not_found_prompt | llm
+        not_found_response = not_found_chain.invoke({"name": product_name})
+        
+        return {
+            **state,
+            "conversation_history": state["conversation_history"] + [
+                AIMessage(content=not_found_response.content)
+            ],
+            "current_node": END
+        }
 
 def get_initial_state():
     """Returns the initial state for the workflow."""
@@ -114,24 +183,25 @@ def create_workflow():
     """Creates and returns the compiled workflow."""
     workflow = StateGraph(AudienceBuilderState)
     
-    # Add nodes
     workflow.add_node("greet", greet)
     workflow.add_node("identify_product", identify_product)
+    workflow.add_node("lookup_product_details", lookup_product_details)
 
-    # Add edges
     workflow.add_edge("greet", "identify_product")
-    
-    # Add conditional edges
+    workflow.add_edge("identify_product", "lookup_product_details")
+
     workflow.add_conditional_edges(
         "identify_product",
-        route_next_step,
+        lambda state: state["current_node"],
         {
             "identify_product": "identify_product",
+            "lookup_product_details": "lookup_product_details",
             END: END
         }
     )
 
-    # Set entry point
+    workflow.add_edge("lookup_product_details", END)
+
     workflow.set_entry_point("greet")
     
     return workflow.compile()
