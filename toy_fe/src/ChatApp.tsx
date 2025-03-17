@@ -69,7 +69,6 @@ const ChatApp = () => {
         // Handle responses from server
         const messageHandler = (event: MessageEvent) => {
           const data = event.data;
-          
           // Check if it's a thread ID message
           if (typeof data === 'string' && data.startsWith('THREAD_ID:')) {
             const newThreadId = data.substring(10);
