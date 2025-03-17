@@ -1,18 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { UserOutlined, RobotOutlined } from "@ant-design/icons";
-import { Bubble, Sender } from "@ant-design/x";
-import { Flex, type GetProp, Typography } from "antd";
-import markdownit from "markdown-it";
-
-// Initialize markdown-it
-const md = markdownit({ html: true, breaks: true });
-
-// Define the markdown renderer function
-const renderMarkdown = (content: string) => (
-  <Typography>
-    <div dangerouslySetInnerHTML={{ __html: md.render(content) }} />
-  </Typography>
-);
+import { Bubble, Sender, useXAgent, useXChat } from "@ant-design/x";
+import { Flex, type GetProp } from "antd";
 
 const roles: GetProp<typeof Bubble.List, "roles"> = {
   ai: {
@@ -20,12 +9,10 @@ const roles: GetProp<typeof Bubble.List, "roles"> = {
     avatar: { icon: <RobotOutlined />, style: { background: "#fde3cf" } },
     typing: { step: 5, interval: 20 },
     style: { maxWidth: 600 },
-    messageRender: renderMarkdown, // Add markdown rendering for AI messages
   },
   local: {
     placement: "end",
     avatar: { icon: <UserOutlined />, style: { background: "#87d068" } },
-    messageRender: renderMarkdown, // Add markdown rendering for user messages
   },
 };
 

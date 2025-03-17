@@ -13,6 +13,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "antd": "^5.24.4",
+    "markdown-it": "^14.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-scripts": "5.0.1",
@@ -42,5 +43,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2"
   }
 }
