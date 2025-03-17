@@ -32,17 +32,26 @@ class State(TypedDict):
 def greet(state):
     msg = "Hey there! I'm your Pollen assistant. Which product are we building audiences for?"
     state["conversation_history"].append(AIMessage(content=msg))
-    state["current_node"] = "DONE"
+    state["current_node"] = "product_details"
+    return state
+
+def product_details(state):
+    msg = "Can you share the product name?"
+    state["conversation_history"].append(AIMessage(content=msg))
+    state["current_node"] = END
     return state
 
 def create_workflow(state):
     # Pass the State class (not an instance) to StateGraph
     graph = StateGraph(state)
     graph.add_node("greet", greet)
+    graph.add_node("product_details", product_details)
+
     graph.set_entry_point("greet")
     
     # Add edge to END
-    graph.add_edge("greet", END)
+    graph.add_edge("greet", "product_details")
+    graph.add_edge("product_details", END)
     
     # Create MemorySaver WITHOUT configurable parameter
     return graph.compile(checkpointer=MemorySaver())
