@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { UserOutlined, RobotOutlined } from "@ant-design/icons";
 import { Bubble, Sender } from "@ant-design/x";
-import { Flex, type GetProp, Typography, Table } from "antd";
+import { Flex, type GetProp, Typography, message } from "antd";
+import ComplexMessage from "./components/ComplexMessage";
 import markdownit from "markdown-it";
 
 // Initialize markdown-it
@@ -14,90 +15,12 @@ const renderMarkdown = (content: string) => (
   </Typography>
 );
 
-// Define types for the table data
-interface TableSku {
-  name: string;
-  sku: string | number;
-}
-
-interface TableRow {
+// Define types for selected categories
+interface SelectedCategory {
   buyer_category: string;
   product_category: string;
-  skus: TableSku[];
-  count: number;
+  key: string | number;
 }
-
-interface ProductTableData {
-  query: string;
-  total_results: number;
-  rows: TableRow[];
-}
-
-// Define the component to render product tables
-const ProductTable = ({ tableData }: { tableData: ProductTableData }) => {
-  // Prepare columns for Ant Design Table
-  const columns = [
-    {
-      title: 'Buyer Category',
-      dataIndex: 'buyer_category',
-      key: 'buyer_category',
-    },
-    {
-      title: 'Product Category',
-      dataIndex: 'product_category',
-      key: 'product_category',
-    },
-    {
-      title: 'Sample SKUs',
-      dataIndex: 'skus',
-      key: 'skus',
-      render: (skus: TableSku[]) => (
-        <ul style={{ paddingLeft: '20px', margin: 0 }}>
-          {skus.map((sku, index) => (
-            <li key={index}>{sku.name} (SKU: {sku.sku})</li>
-          ))}
-        </ul>
-      ),
-    },
-    {
-      title: 'Total SKUs',
-      dataIndex: 'count',
-      key: 'count',
-    },
-  ];
-
-  return (
-    <Table 
-      dataSource={tableData.rows.map((row, index) => ({ ...row, key: index }))} 
-      columns={columns} 
-      pagination={false}
-      size="small"
-      style={{ marginTop: '10px', marginBottom: '10px' }}
-    />
-  );
-};
-
-// Define types for message content
-type MessageContent = string | {
-  text: string;
-  table: ProductTableData;
-};
-
-// Define custom message component to handle complex messages
-const ComplexMessage = ({ content }: { content: MessageContent }) => {
-  // If the content is a string, render it as markdown
-  if (typeof content === 'string') {
-    return renderMarkdown(content);
-  }
-  
-  // If content is an object with text and table
-  return (
-    <div>
-      {renderMarkdown(content.text)}
-      <ProductTable tableData={content.table} />
-    </div>
-  );
-};
 
 const roles: GetProp<typeof Bubble.List, "roles"> = {
   ai: {
@@ -105,13 +28,33 @@ const roles: GetProp<typeof Bubble.List, "roles"> = {
     avatar: { icon: <RobotOutlined />, style: { background: "#fde3cf" } },
     typing: { step: 5, interval: 20 },
     style: { maxWidth: 800 }, // Increased max width to accommodate tables
-    messageRender: (content) => <ComplexMessage content={content} />, // Use complex message renderer
+    messageRender: (content) => (
+      <ComplexMessage 
+        content={content} 
+        onSelectionApplied={(selected) => handleSelectionApplied(selected)}
+      />
+    ),
   },
   local: {
     placement: "end",
     avatar: { icon: <UserOutlined />, style: { background: "#87d068" } },
     messageRender: renderMarkdown,
   },
+};
+
+// Function to handle selection from the table
+const handleSelectionApplied = (selected: SelectedCategory[]) => {
+  // Format the categories for display
+  const categoriesText = selected.map(
+    item => `${item.buyer_category} > ${item.product_category}`
+  ).join(", ");
+  
+  // Show success message
+  message.success(`Selected ${selected.length} categories for audience building: ${categoriesText}`);
+  
+  // Here you would typically send this selection to your backend
+  // For example:
+  // sendSelectedCategoriesToBackend(selected);
 };
 
 const ChatApp = () => {
@@ -178,6 +121,21 @@ const ChatApp = () => {
 
     setMessages((prev) => [...prev, { id: prev.length, message, role: "local" }]);
     webSocketRef.current.send(message);
+  };
+
+  // Function to send selected categories to backend
+  const sendSelectedCategoriesToBackend = (categories: SelectedCategory[]) => {
+    if (!webSocketRef.current || webSocketRef.current.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected.");
+      return;
+    }
+
+    const message = {
+      type: "selection",
+      categories: categories
+    };
+    
+    webSocketRef.current.send(JSON.stringify(message));
   };
 
   return (
