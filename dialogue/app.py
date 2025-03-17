@@ -1,64 +1,92 @@
+# app.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from next.dialogue_manager import get_initial_state, create_workflow
+from dialogue_manager import get_initial_state, create_workflow, State
 from langchain_core.messages import HumanMessage, AIMessage
+from template import html
+from pydantic import BaseModel
 
 app = FastAPI()
 
-# Compile the workflow once
-workflow = create_workflow()
+workflow = create_workflow(state=State)
+counter = 0
 
-# Allow from localhost:3000
+@app.get("/")
+async def get():
+    return HTMLResponse(html)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Thread_Id
+class ChatInput(BaseModel):
+    message: str
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    global counter
     await websocket.accept()
-    print("WebSocket connected")
+    
+    counter += 1
+    thread_id = str(counter)
+    
+    # Send thread_id to client (optional)
+    await websocket.send_text(f"THREAD_ID:{thread_id}")
 
-    # Send an immediate ping
-    await websocket.send_json({"type": "ping", "content": "Connection test"})
-    print("Sent test ping")
-
-    # Create new state, run greeting
+    # Initialize state
     state = get_initial_state()
-    for step_result in workflow.stream(state):
-        print(state)
-        # If there's a new AIMessage, send it
-        msgs = step_result["conversation_history"]
-        if msgs and isinstance(msgs[-1], AIMessage):
-            await websocket.send_json({"content": msgs[-1].content})
-        state = step_result
-    print("Greeting complete")
-
-    # Receive user input repeatedly
+    
+    # Config with thread_id
+    config = {"configurable": {"thread_id": thread_id}}
+    
+    # Initial workflow execution with thread_id
+    async for step_result in workflow.astream(state, config=config):
+        if step_result:
+            # Extract the actual state
+            node_name = next(iter(step_result))
+            actual_state = step_result[node_name]
+            
+            # Check for AI messages to send
+            msgs = actual_state["conversation_history"]
+            if msgs and isinstance(msgs[-1], AIMessage):
+                await websocket.send_text(msgs[-1].content)
+    
+    # Update state with the actual last state
+    if step_result:
+        node_name = next(iter(step_result))
+        state = step_result[node_name]
+    
     try:
+        # Main interaction loop
         while True:
-            text = await websocket.receive_text()
-            print("Got user message:", text)
-
-            state["conversation_history"].append(HumanMessage(content=text))
-
-            # Run workflow steps
-            for step_result in workflow.stream(state):
-                old_len = len(state["conversation_history"])
-                new_len = len(step_result["conversation_history"])
-                if new_len > old_len:
-                    last_msg = step_result["conversation_history"][-1]
-                    if isinstance(last_msg, AIMessage):
-                        await websocket.send_json({"content": last_msg.content})
-                state = step_result
-
+            user_input = await websocket.receive_text()
+            
+            # Update state with user input
+            state["conversation_history"].append(HumanMessage(content=user_input))
+            
+            # Process through workflow again with the same thread_id in config
+            async for step_result in workflow.astream(state, config=config):
+                if step_result:
+                    node_name = next(iter(step_result))
+                    actual_state = step_result[node_name]
+                    msgs = actual_state["conversation_history"]
+                    
+                    if msgs and isinstance(msgs[-1], AIMessage):
+                        await websocket.send_text(msgs[-1].content)
+            
+            # Update state with the last result
+            if step_result:
+                node_name = next(iter(step_result))
+                state = step_result[node_name]
+                
     except WebSocketDisconnect:
-        print("Client disconnected")
-
+        print(f"Client disconnected: {thread_id}")
+        
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,8 +1,10 @@
+# dialogue_manager.py
 import os
 from typing import List, Optional, TypedDict
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import AzureChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 from dotenv import load_dotenv
 
@@ -33,16 +35,17 @@ def greet(state):
     state["current_node"] = "DONE"
     return state
 
-def create_workflow():
+def create_workflow(state):
     # Pass the State class (not an instance) to StateGraph
-    graph = StateGraph(State)
+    graph = StateGraph(state)
     graph.add_node("greet", greet)
     graph.set_entry_point("greet")
     
     # Add edge to END
     graph.add_edge("greet", END)
     
-    return graph.compile()
+    # Create MemorySaver WITHOUT configurable parameter
+    return graph.compile(checkpointer=MemorySaver())
 
 def get_initial_state():
     return {
@@ -50,25 +53,3 @@ def get_initial_state():
         "product_name": None,
         "current_node": "greet",
     }
-
-# Create the workflow using the State class
-workflow = create_workflow()
-
-# Initialize state
-state = get_initial_state()
-
-# Process through the workflow
-for step_result in workflow.stream(state):
-    print("Current step result:", step_result)
-
-    node_name = next(iter(step_result))
-    actual_state = step_result[node_name]
-
-    # Access conversation_history from actual_state, not step_result
-    msgs = actual_state["conversation_history"]
-    
-    if msgs and isinstance(msgs[-1], AIMessage):
-        print("\n\nAI Message:", msgs[-1].content)
-    
-    # Update state with the actual state
-    state = actual_state
