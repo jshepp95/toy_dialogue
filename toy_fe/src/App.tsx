@@ -1,10 +1,13 @@
+// App.tsx - Main entry point
 import React from 'react';
-import './App.css';
+import ChatApp from './ChatApp';
 
 function App() {
   return (
-    <div className="App">
-      <p>Hello World!</p>
+    <div className="app">
+      <main>
+        <ChatApp />
+      </main>
     </div>
   );
 }

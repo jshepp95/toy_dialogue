@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dialogue_manager import get_initial_state, create_workflow, State
 from langchain_core.messages import HumanMessage, AIMessage
-from template import html
 from pydantic import BaseModel
 
 app = FastAPI()
