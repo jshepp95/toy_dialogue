@@ -37,8 +37,7 @@ async def websocket_endpoint(websocket: WebSocket):
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
-        # **Ensure the initial state is only executed once**
-        if state["current_node"] == "greet":
+        if not state["conversation_history"]:
             async for step_result in workflow.astream(state, config=config):
                 if step_result:
                     node_name = next(iter(step_result))
@@ -46,7 +45,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     msgs = state["conversation_history"]
                     if msgs and isinstance(msgs[-1], AIMessage):
                         await websocket.send_text(msgs[-1].content)
-                    break  # ✅ Exit after first message to avoid looping
+                    break  # ✅ Stops greet from looping
 
         while True:
             user_message = await websocket.receive_text()
@@ -56,13 +55,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 async for step_result in workflow.astream(state, config=config):
                     if step_result:
                         node_name = next(iter(step_result))
-                        state = step_result[node_name]  # ✅ Persist state
+                        state = step_result[node_name]  # ✅ Persist updated state
                         print(f"🚀 Transitioning to: {state['current_node']}")  # Debugging
                         msgs = state["conversation_history"]
                         if msgs and isinstance(msgs[-1], AIMessage):
                             await websocket.send_text(msgs[-1].content)
 
-                # **If workflow reaches END, close the WebSocket**
+                # ✅ Close WebSocket when workflow ends
                 if state["current_node"] == END:
                     print(f"✅ Ending conversation for thread {thread_id}")
                     await websocket.close()

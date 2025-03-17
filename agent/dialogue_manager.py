@@ -31,9 +31,12 @@ llm = AzureChatOpenAI(
 def greet(state: AudienceBuilderState) -> AudienceBuilderState:
     print(f"\n\nGreeting user from state: {state}")
     
+    if state["conversation_history"]:
+        return state
+
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="""You are an audience building assistant for Pollen.
-        Greet the user warmly and ask which product and corresponding SKU they'd like to build audiences for.
+        Greet the user warmly and ask which product and corresponding Product they'd like to build audiences for.
         Don't sound cheesy or corporate.""")
     ])
 
