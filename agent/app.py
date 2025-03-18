@@ -67,6 +67,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                     # Format the category details as a readable list
                     categories_text = ", ".join(category_details)
+
+                    state["audience_selections"] = categories
+        
+                    print(f"Updated state with audience selections: {state['audience_selections']}")
                     
                     # Send a more detailed acknowledgment back to client
                     await websocket.send_json({
