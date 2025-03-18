@@ -163,13 +163,13 @@ For missing ones, just fill with a short placeholder.
         "marketing_duration": brief_data["duration"],
         "conversation_history": state["conversation_history"] + [
             AIMessage(content=(
-                f"Great, we have all the details now:\n"
-                f"• Product: {brief_data['product_name']}\n"
-                f"• Objectives: {brief_data['objectives']}\n"
-                f"• Budget: {brief_data['budget']}\n"
-                f"• Channel: {brief_data['channel']}\n"
-                f"• Duration: {brief_data['duration']}\n"
-                "Let me pull up relevant product details..."
+                f"Great, we have all the details now:\n\n"
+                f"• **Product**: {brief_data['product_name']}\n"
+                f"• **Objectives**: {brief_data['objectives']}\n"
+                f"• **Budget**: {brief_data['budget']}\n"
+                f"• **Channel**: {brief_data['channel']}\n"
+                f"• **Duration**: {brief_data['duration']}\n"
+                f"\n\nLet me retrieve some product details for **{brief_data['product_name']}**..."
             ))
         ],
         "current_node": "get_product_table"
@@ -203,8 +203,10 @@ def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
         {table_data}
 
         Provide:
-        1) A short reccomendation for the best Product Category & Buyer Category combination that is related to thier marketing objective
+        1) A VERY short reccomendation for the best Product Category & Buyer Category combination that is related to thier marketing objective
 
+        Use 'some' emojis, but don't overdo it or be too cheesy. Use some bold for emphasis. Add some space for your sentences.
+                                                            
         Do NOT produce an actual table in the text. We'll display it separately.
         """)
         
