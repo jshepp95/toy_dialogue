@@ -28,9 +28,7 @@ llm = AzureChatOpenAI(
     temperature=0
 )
 
-#
-# 1) Pydantic model to parse the Marketing Brief in one shot
-#
+
 class MarketingBrief(BaseModel):
     product_name: str
     objectives: str
@@ -38,9 +36,6 @@ class MarketingBrief(BaseModel):
     channel: str
     duration: str
 
-#
-# 2) greet node
-#
 def greet(state: AudienceBuilderState) -> AudienceBuilderState:
     print(f"\n\nGreeting user from state: {state}")
     
@@ -49,9 +44,11 @@ def greet(state: AudienceBuilderState) -> AudienceBuilderState:
 
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="""You are an audience-building assistant for Pollen.
-        Greet the user warmly.
+        Greet the Abhinav warmly.
         
-        Then **ask for a brief** (product name, objectives, budget, channel, duration)
+        Use 'some' emojis, but don't overdo it or be too cheesy. Use some bold for emphasis.
+
+        Then **ask for a brief** (product name, objectives, budget, channel, duration) with a super short explanation of each,
         so we can get started building the best possible audience.""")
     ])
 
@@ -66,9 +63,6 @@ def greet(state: AudienceBuilderState) -> AudienceBuilderState:
         "current_node": "gather_marketing_brief"
     }
 
-#
-# 3) gather_marketing_brief node
-#
 def gather_marketing_brief(state: AudienceBuilderState) -> AudienceBuilderState:
     print(f"\n\nCapturing marketing brief from user. State: {state}")
 
@@ -159,8 +153,6 @@ For missing ones, just fill with a short placeholder.
             "current_node": "gather_marketing_brief"
         }
 
-    # 7) If no missing fields, we have a complete brief. Save it more cleanly into state.
-    #    Move on to the next node.
     return {
         **state,
         "brief_data": brief_data,  # for reference
@@ -183,14 +175,10 @@ For missing ones, just fill with a short placeholder.
         "current_node": "get_product_table"
     }
 
-#
-# 4) get_product_table node
-#
 def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
     print("\n\nFormatting Search Results")
     
     product_name = state.get("product_name")
-    objective = state.get("marketing_objectives")
 
     try:
         product_search_results = state.get("product_search_results")
@@ -205,7 +193,7 @@ def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
         response_prompt = ChatPromptTemplate.from_template("""
         You have been presented with the users marketing brief query, for Audience Building.
 
-        Marketing Objective: {objective}                                                   
+        Marketing Objective: Conversion                                                   
         Product: {query}
         Buyer Categories: {buyer_categories}
         Product Categories: {product_categories}
@@ -231,7 +219,6 @@ def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
         
         response_chain = response_prompt | llm
         response = response_chain.invoke({
-            "marketing_objectives": objective,
             "query": product_name,
             "buyer_categories": ", ".join(product_search_results.unique_buyer_categories),
             "product_categories": ", ".join(product_search_results.unique_product_categories),
@@ -259,9 +246,6 @@ def get_product_table(state: AudienceBuilderState) -> AudienceBuilderState:
             "current_node": END
         }
 
-#
-# 5) get_initial_state
-#
 def get_initial_state():
     return {
         "conversation_history": [],
@@ -278,9 +262,7 @@ def get_initial_state():
         "current_node": "greet",
     }
 
-#
-# 6) create_workflow
-#
+
 def create_workflow():
     workflow = StateGraph(AudienceBuilderState)
     
