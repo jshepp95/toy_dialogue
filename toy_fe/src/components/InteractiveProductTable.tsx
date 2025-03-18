@@ -55,11 +55,6 @@ const InteractiveProductTable = ({
       ]);
     }
   };
-  
-  // Create a unique tag identifier for each category combination
-  const getCategoryTag = (record: TableRow) => {
-    return `${record.buyer_category} > ${record.product_category}`;
-  };
 
   // Prepare columns for Ant Design Table with the Action column
   const columns = [

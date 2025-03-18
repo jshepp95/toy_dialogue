@@ -25,6 +25,16 @@ class ProductSearchResults(BaseModel):
     by_product_category: Dict[str, List[ProductDetails]]
     all_products: List[ProductDetails]
 
+class SelectedCategory(BaseModel):
+    """Schema for selected audience category"""
+    buyer_category: str = Field(..., description="The buyer category")
+    product_category: str = Field(..., description="The product category")
+
+class AudienceSelections(BaseModel):
+    """Schema for audience building selections"""
+    categories: List[SelectedCategory] = Field(default_factory=list, description="Selected categories")
+    created_at: Optional[str] = Field(None, description="When the audience was created")
+
 class AudienceBuilderState(TypedDict):
     conversation_history: Annotated[List[Union[HumanMessage, AIMessage, Dict]], "conversation history", "append"]
     sku: Annotated[Optional[str], "The product sku the user wants"]
@@ -32,6 +42,6 @@ class AudienceBuilderState(TypedDict):
     product_category: Annotated[Optional[str], "Product category from DB"]
     buyer_category: Annotated[Optional[str], "Buyer category from DB"]
     product_search_results: Annotated[Optional[ProductSearchResults], "Product search results from DB"]
-    product_search_summary: Annotated[Optional[str], "Summary of product search results"]
-    product_table: Annotated[Optional[Dict], "Product table for UI"]
+    product_table: Annotated[Optional[Dict], "Structured table data for UI rendering"]
+    audience_selections: Annotated[Optional[AudienceSelections], "User's audience building selections"]
     current_node: str

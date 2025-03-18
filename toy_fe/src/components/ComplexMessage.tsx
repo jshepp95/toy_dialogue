@@ -26,10 +26,17 @@ interface ProductTableData {
 }
 
 // Define types for message content
-type MessageContent = string | {
-  text: string;
-  table: ProductTableData;
-};
+type MessageContent = 
+  | string 
+  | {
+      text: string;
+      table: ProductTableData;
+    }
+  | {
+      message: string;
+      type?: string;
+      [key: string]: any;  // Allow for other properties
+    };
 
 interface SelectedCategory {
   buyer_category: string;
@@ -46,27 +53,56 @@ const ComplexMessage = ({
   onSelectionApplied?: (selected: SelectedCategory[]) => void
 }) => {
   // Function to render markdown content
-  const renderMarkdown = (text: string) => (
-    <Typography>
-      <div dangerouslySetInnerHTML={{ __html: md.render(text) }} />
-    </Typography>
-  );
+  const renderMarkdown = (text: string) => {
+    if (typeof text !== 'string') {
+      console.error("Expected string for markdown rendering, got:", text);
+      return <Typography>Invalid content format</Typography>;
+    }
+    
+    return (
+      <Typography>
+        <div dangerouslySetInnerHTML={{ __html: md.render(text) }} />
+      </Typography>
+    );
+  };
 
-  // If the content is a string, render it as markdown
+  // If content is an object with text and table
+  if (content && typeof content === 'object' && 'text' in content && 'table' in content) {
+    return (
+      <div>
+        {renderMarkdown(content.text)}
+        {content.table && (
+          <InteractiveProductTable 
+            tableData={content.table} 
+            onSelectionApplied={onSelectionApplied}
+          />
+        )}
+      </div>
+    );
+  }
+  
+  // If the content is a simple message (string)
   if (typeof content === 'string') {
     return renderMarkdown(content);
   }
   
-  // If content is an object with text and table
-  return (
-    <div>
-      {renderMarkdown(content.text)}
-      <InteractiveProductTable 
-        tableData={content.table} 
-        onSelectionApplied={onSelectionApplied}
-      />
-    </div>
-  );
+  // Handle other types of responses (like audience_selection responses)
+  if (content && typeof content === 'object') {
+    // For response messages from selections
+    if ('message' in content && typeof content.message === 'string') {
+      return renderMarkdown(content.message);
+    }
+    
+    // For other object types, render as JSON
+    return (
+      <Typography>
+        <pre>{JSON.stringify(content, null, 2)}</pre>
+      </Typography>
+    );
+  }
+  
+  // Fallback for other content types
+  return <Typography>Unsupported content format</Typography>;
 };
 
 export default ComplexMessage;

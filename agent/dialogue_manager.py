@@ -198,7 +198,8 @@ def get_initial_state():
         "product_category": None,
         "buyer_category": None,
         "product_search_results": None,
-        "all_products": [],
+        "product_table": None,
+        "audience_selections": None,
         "current_node": "greet",
     }
 
@@ -228,6 +229,10 @@ def create_workflow():
     workflow.set_entry_point("greet")
     
     return workflow.compile()
+
+
+
+
 
 
 # def lookup_product_details(state: AudienceBuilderState) -> AudienceBuilderState:

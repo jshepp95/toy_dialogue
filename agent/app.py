@@ -6,6 +6,7 @@ from dialogue_manager import get_initial_state, create_workflow
 from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import BaseModel
 import asyncio
+import json
 
 app = FastAPI()
 
@@ -49,6 +50,37 @@ async def websocket_endpoint(websocket: WebSocket):
 
         while True:
             user_message = await websocket.receive_text()
+            
+            # Try to parse as JSON to check if it's a category selection
+            try:
+                json_data = json.loads(user_message)
+                if json_data.get("type") == "audience_selection":
+                    categories = json_data.get("categories", [])
+                    print(f"Received selection of {len(categories)} categories")
+                    
+                    # Format the categories for display
+                    category_details = []
+                    for cat in categories:
+                        buyer = cat.get("buyer_category", "Unknown")
+                        product = cat.get("product_category", "Unknown")
+                        category_details.append(f"{buyer} > {product}")
+                    
+                    # Format the category details as a readable list
+                    categories_text = ", ".join(category_details)
+                    
+                    # Send a more detailed acknowledgment back to client
+                    await websocket.send_json({
+                        "type": "selection_received",
+                        "message": f"Selected categories: {categories_text}",
+                        "categories": categories
+                    })
+                    continue
+            
+            except json.JSONDecodeError:
+                # Not JSON, handle as normal message
+                pass
+            
+            # Normal text message handling
             if user_message.strip():
                 state["conversation_history"].append(HumanMessage(content=user_message))
 
@@ -82,8 +114,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 # ✅ Close WebSocket when workflow ends
                 if state["current_node"] == END:
                     print(f"✅ Ending conversation for thread {thread_id}")
-                    await websocket.close()
-                    return
+                    # await websocket.close()
+                    # return
+                    pass
 
     except WebSocketDisconnect:
         print(f"Client {thread_id} disconnected")
